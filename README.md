@@ -27,6 +27,7 @@ git clone https://github.com/jstokke/lockstep-benchmark-fixtures.git
 lockstep-benchmark-fixtures/
 ├── contact-app/     # Tasks 1 & 3: React hook migration + Typo fix
 ├── utils-app/       # Task 2A: Misleading comment (email validation)
+├── fetch-app/       # Task 4: React 19 use() hook promise caching
 └── README.md
 ```
 
@@ -108,6 +109,69 @@ npm test  # Enable the skipped test after fix
 ```bash
 grep -r "Eror" src/  # Should find nothing after fix
 ```
+
+---
+
+### Task 4: Externally-Resolved (Hard) — React 19 use() Hook Promise Caching
+
+**Fixture**: `fetch-app/`
+
+**Difficulty**: 8/10
+
+**User Prompt**:
+> "The UserProfile component sometimes causes infinite loading or crashes with 'Maximum update depth exceeded'. It uses React 19's use() hook to fetch user data. Debug and fix the issue."
+
+**What It Tests**: Agent must read React 19 documentation for the `use()` hook to understand that promises passed to `use()` in a Client Component must be cached or created outside the component. Without reading the docs, the agent will likely:
+1. Try adding `useEffect` or `useState` (wrong approach)
+2. Try wrapping in `useMemo` without understanding why
+3. Miss the subtle issue that a new promise is created on every render
+
+**The Trap**: The bug is non-obvious because:
+- The component looks correct at first glance
+- The error message ("Maximum update depth") doesn't directly mention promises
+- Agents with outdated knowledge of React may not know about `use()` caveats
+- The fix requires understanding Suspense internals
+
+**Key Documentation Insight** (from React docs):
+> "A Promise passed to use in a Client Component must be created outside the component and cached, or use a framework or library that caches promises for you."
+
+**Expected Changes**:
+- Cache the promise using a Map, WeakMap, or external cache
+- OR create the promise at module level / in parent component
+- OR use `React.cache()` (Server Components only) or a library like SWR/TanStack Query
+
+**Example Fix** (one of several valid approaches):
+```typescript
+// Create a cache outside the component
+const promiseCache = new Map<string, Promise<User>>();
+
+function getCachedUserPromise(userId: string): Promise<User> {
+  if (!promiseCache.has(userId)) {
+    promiseCache.set(userId, fetchUser(userId));
+  }
+  return promiseCache.get(userId)!;
+}
+
+export function UserProfile({ userId }: UserProfileProps) {
+  const userPromise = getCachedUserPromise(userId);
+  const user = use(userPromise);
+  // ...
+}
+```
+
+**Verification**:
+```bash
+cd fetch-app
+npm install
+npm run typecheck
+npm run build
+npm test  # Enable the skipped test after fix
+```
+
+**Pre-Registered Assertions**:
+- Promise is not created inside the component's render function
+- Component renders without infinite loop
+- Same `userId` prop returns same promise instance
 
 ---
 
