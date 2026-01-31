@@ -1,9 +1,8 @@
-// @ts-nocheck
 // This component uses React 19's use() hook to read async data
 // See: https://react.dev/reference/react/use
 
 import { use } from 'react';
-import { fetchUser, type User } from './api';
+import { fetchUser } from './api';
 
 interface UserProfileProps {
   userId: string;
